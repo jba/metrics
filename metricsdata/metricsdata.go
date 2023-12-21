@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"time"
 )
 
 ////////////////////////////////////////////////////////////////
@@ -22,29 +23,29 @@ type MetricsData struct {
 }
 
 type ResourceMetrics struct {
-	Resource     Resource
-	ScopeMetrics []ScopeMetrics
+	Resource     Resource       `json:"resource"`
+	ScopeMetrics []ScopeMetrics `json:"scopeMetrics"`
 }
 
 type ScopeMetrics struct {
-	Scope   InstrumentationScope
-	Metrics []Metric
+	Scope   InstrumentationScope `json:"scope"`
+	Metrics []Metric             `json:"metrics"`
 }
 
 type Resource struct {
-	Attributes []KeyValue
+	Attributes []KeyValue `json:"attributes"`
 }
 
 type InstrumentationScope struct {
-	Name       string
-	Version    string
-	Attributes []KeyValue
+	Name       string     `json:"name"`
+	Version    string     `json:"version"`
+	Attributes []KeyValue `json:"attributes"`
 }
 
 type Metric struct {
 	Name        string `json:"name"`
-	Description string `json:"description"`
 	Unit        string `json:"unit"`
+	Description string `json:"description"`
 	// oneof
 	Gauge     *Gauge     `json:"gauge,omitempty"`
 	Sum       *Sum       `json:"sum,omitempty"`
@@ -57,32 +58,38 @@ type Gauge struct {
 }
 
 type Sum struct {
-	DataPoints             []NumberDataPoint `json:"dataPoints"`
-	AggregationTemporality int               // TODO
-	IsMonotonic            bool
+	Temporality int               `json:"aggregationTemporality"`
+	IsMonotonic bool              `json:"isMonotonic"`
+	DataPoints  []NumberDataPoint `json:"dataPoints"`
 }
 
+const (
+	TemporalityUndefined = iota
+	TemporalityCumulative
+	TemporalityDelta
+)
+
 type NumberDataPoint struct {
-	Attributes        []KeyValue
-	StartTimeUnixNano int64
-	TimeUnixNano      int64
-	Number            Number
+	Number     Number
+	Time       time.Time
+	StartTime  time.Time
+	Attributes []KeyValue
 }
 
 func (n NumberDataPoint) MarshalJSON() ([]byte, error) {
 	fs := []jsonField{
+		{"", nil},
+		{"", nil},
+		{"timeUnixNano", n.Time.UnixNano()},
 		{"attributes", n.Attributes},
-		{"timeUnixNano", n.TimeUnixNano},
-		{"", nil},
-		{"", nil},
 	}
 	if n.Number.isInt {
-		fs[2] = jsonField{"asInt", n.Number}
+		fs[0] = jsonField{"asInt", n.Number}
 	} else {
-		fs[2] = jsonField{"asDouble", n.Number}
+		fs[0] = jsonField{"asDouble", n.Number}
 	}
-	if n.StartTimeUnixNano != 0 {
-		fs[3] = jsonField{"startTimeUnixNano", n.StartTimeUnixNano}
+	if !n.StartTime.IsZero() {
+		fs[1] = jsonField{"startTimeUnixNano", n.StartTime.UnixNano()}
 	}
 	return marshalJSONObject(fs)
 }
@@ -90,6 +97,11 @@ func (n NumberDataPoint) MarshalJSON() ([]byte, error) {
 type Number struct {
 	isInt bool
 	i     int64
+}
+
+func NumberValue[N int64 | float64](n Number) N {
+	// TODO: validate
+	return N(n.i)
 }
 
 func IntNumber(i int64) Number {
@@ -100,6 +112,8 @@ func FloatNumber(f float64) Number {
 	return Number{isInt: false, i: int64(math.Float64bits(f))}
 }
 
+func (n Number) IsInt() bool { return n.isInt }
+
 func (n Number) MarshalJSON() ([]byte, error) {
 	if n.isInt {
 		return json.Marshal(n.i)
@@ -108,17 +122,17 @@ func (n Number) MarshalJSON() ([]byte, error) {
 }
 
 type Histogram struct {
-	DataPoints             []HistogramDataPoint `json:"dataPoints"`
-	AggregationTemporality int                  // TODO
+	Temporality int                  `json:"aggregationTemporality"` // TODO
+	DataPoints  []HistogramDataPoint `json:"dataPoints"`
 }
 
 type HistogramDataPoint struct {
-	Attributes        []KeyValue
-	StartTimeUnixNano int64
-	TimeUnixNano      int64
-	//Count             uint64 // sum of BucketCounts; can we omit?
+	Attributes   []KeyValue
+	Time         time.Time
+	StartTime    time.Time
 	BucketCounts []uint64
-
+	Sum          float64
+	Min, Max     float64
 	// The boundaries for bucket at index i are:
 	//
 	// (-infinity, explicit_bounds[i]] for i == 0
@@ -133,27 +147,64 @@ type HistogramDataPoint struct {
 	ExplicitBounds []float64
 }
 
+type jsonHDP struct {
+	StartTime      int64      `json:"startTimeUnixNano,omitEmpty"`
+	Time           int64      `json:"timeUnixNano"`
+	Count          uint64     `json:"count"`
+	Sum            float64    `json:"sum"`
+	BucketCounts   []uint64   `json:"bucketCounts"`
+	ExplicitBounds []float64  `json:"explicitBounds"`
+	Min            float64    `json:"min"`
+	Max            float64    `json:"max"`
+	Attributes     []KeyValue `json:"attributes"`
+}
+
+func (hdp HistogramDataPoint) MarshalJSON() ([]byte, error) {
+	count := uint64(0)
+	for _, c := range hdp.BucketCounts {
+		count += c
+	}
+	jh := jsonHDP{
+		Attributes:     hdp.Attributes,
+		Time:           hdp.Time.UnixNano(),
+		StartTime:      hdp.StartTime.UnixNano(),
+		Count:          count,
+		Sum:            hdp.Sum,
+		Min:            hdp.Min,
+		Max:            hdp.Max,
+		BucketCounts:   hdp.BucketCounts,
+		ExplicitBounds: hdp.ExplicitBounds,
+	}
+	return json.Marshal(jh)
+}
+
 type KeyValue struct {
+	Key   string
+	Value any
+}
+
+type jsonValue struct {
 	Key   string `json:"key"`
-	Value any    // one of string, bool, int64
+	Value struct {
+		S *string `json:"stringValue,omitempty"`
+		B *bool   `json:"boolValue,omitempty"`
+		I *int64  `json:"intValue,omitempty"`
+	} `json:"value"`
 }
 
 func (kv KeyValue) MarshalJSON() ([]byte, error) {
-	var valkey string
-	switch kv.Value.(type) {
+	jv := jsonValue{Key: kv.Key}
+	switch v := kv.Value.(type) {
 	case int64:
-		valkey = "intValue"
+		jv.Value.I = &v
 	case bool:
-		valkey = "boolValue"
+		jv.Value.B = &v
 	case string:
-		valkey = "stringValue"
+		jv.Value.S = &v
 	default:
 		return nil, fmt.Errorf("bad value type in KeyValue: %T", kv.Value)
 	}
-	return marshalJSONObject([]jsonField{
-		{"key", kv.Key},
-		{valkey, kv.Value},
-	})
+	return json.Marshal(jv)
 }
 
 type jsonField struct {

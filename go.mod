@@ -1,3 +1,4 @@
 module github.com/jba/metrics
 
-go 1.22
+go 1.21
+

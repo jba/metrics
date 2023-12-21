@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// TODO: doc Unit interface
 // TODO: match prefix segment-wise: "foo" matches "foo/" but not "foolish".
 
 package metrics
@@ -126,36 +125,35 @@ func readMetrics(t time.Time, rss []readerSelected) []md.Metric {
 	for _, rs := range rss {
 		ms = append(ms, rs.r.Read(rs.names)...)
 	}
-	tun := t.UnixNano()
 	for _, m := range ms {
-		setNonZeroTimes(tun, m)
+		setNonZeroTimes(t, m)
 	}
 	return ms
 }
 
-func setNonZeroTimes(tun int64, m md.Metric) {
+func setNonZeroTimes(t time.Time, m md.Metric) {
 	switch {
 	case m.Gauge != nil:
-		setNonZeroTimesNumber(tun, m.Gauge.DataPoints)
+		setNonZeroTimesNumber(t, m.Gauge.DataPoints)
 	case m.Sum != nil:
-		setNonZeroTimesNumber(tun, m.Sum.DataPoints)
+		setNonZeroTimesNumber(t, m.Sum.DataPoints)
 	case m.Histogram != nil:
-		setNonZeroTimesHistogram(tun, m.Histogram.DataPoints)
+		setNonZeroTimesHistogram(t, m.Histogram.DataPoints)
 	}
 }
 
-func setNonZeroTimesNumber(timeUnixNano int64, dps []md.NumberDataPoint) {
+func setNonZeroTimesNumber(t time.Time, dps []md.NumberDataPoint) {
 	for i, dp := range dps {
-		if dp.TimeUnixNano == 0 {
-			dps[i].TimeUnixNano = timeUnixNano
+		if dp.Time.IsZero() {
+			dps[i].Time = t
 		}
 	}
 }
 
-func setNonZeroTimesHistogram(timeUnixNano int64, dps []md.HistogramDataPoint) {
+func setNonZeroTimesHistogram(t time.Time, dps []md.HistogramDataPoint) {
 	for i, dp := range dps {
-		if dp.TimeUnixNano == 0 {
-			dps[i].TimeUnixNano = timeUnixNano
+		if dp.Time.IsZero() {
+			dps[i].Time = t
 		}
 	}
 }
@@ -281,14 +279,22 @@ func sampleToMetric(d Description, s rm.Sample) md.Metric {
 		dp := md.NumberDataPoint{
 			Number: valueToNumber(s.Value),
 		}
-		return newMetric(d, []md.NumberDataPoint{dp}, nil)
+		return newNumberMetric(d, []md.NumberDataPoint{dp})
 	}
 	counts, bounds := convertHistogram(s.Value.Float64Histogram())
-	dp := md.HistogramDataPoint{
-		BucketCounts:   counts,
-		ExplicitBounds: bounds,
+	return md.Metric{
+		Name:        d.Name,
+		Description: d.Description,
+		Unit:        d.Unit,
+		Histogram: &md.Histogram{
+			DataPoints: []md.HistogramDataPoint{
+				{
+					BucketCounts:   counts,
+					ExplicitBounds: bounds,
+				},
+			},
+		},
 	}
-	return newMetric(d, nil, []md.HistogramDataPoint{dp})
 }
 
 func valueToNumber(v rm.Value) md.Number {
@@ -303,27 +309,34 @@ func valueToNumber(v rm.Value) md.Number {
 	}
 }
 
-func newMetric(d Description, ndps []md.NumberDataPoint, hdps []md.HistogramDataPoint) md.Metric {
+func (d *Description) toMetric() md.Metric {
+	return md.Metric{
+		Name:        d.Name,
+		Description: d.Description,
+		Unit:        d.Unit,
+	}
+}
+
+func newNumberMetric(d Description, ndps []md.NumberDataPoint) md.Metric {
+	if len(ndps) == 0 {
+		panic("no points")
+	}
 	m := md.Metric{
 		Name:        d.Name,
 		Description: d.Description,
 		Unit:        d.Unit,
 	}
-	if hdps != nil {
-		m.Histogram = &md.Histogram{DataPoints: hdps}
-	} else {
-		switch d.Sum {
-		case Summable:
-			m.Sum = &md.Sum{
-				AggregationTemporality: 0, // TODO
-				IsMonotonic:            d.Cumulative,
-				DataPoints:             ndps,
-			}
-		case NonSummable:
-			m.Gauge = &md.Gauge{DataPoints: ndps}
-		default:
-			panic("bad SumKind")
+	switch d.Sum {
+	case Summable:
+		m.Sum = &md.Sum{
+			Temporality: 0, // TODO
+			IsMonotonic: d.Cumulative,
+			DataPoints:  ndps,
 		}
+	case NonSummable:
+		m.Gauge = &md.Gauge{DataPoints: ndps}
+	default:
+		panic("bad SumKind")
 	}
 	return m
 }
@@ -879,7 +892,7 @@ func (r *numberReader[N]) Descriptions() []Description {
 func (r *numberReader[N]) Read([]string) []md.Metric {
 	// TODO: what if names are wrong?
 	dp := r.ni.read()
-	return []md.Metric{newMetric(r.desc, []md.NumberDataPoint{dp}, nil)}
+	return []md.Metric{newNumberMetric(r.desc, []md.NumberDataPoint{dp})}
 }
 
 func unit[N ~int64 | ~float64]() string {
@@ -925,6 +938,7 @@ func (g *groupNumberReader[I, A]) Descriptions() []Description {
 	return []Description{g.desc}
 }
 
+// Returns nil if the group is empty.
 func (g *groupNumberReader[I, A]) Read([]string) []md.Metric {
 	var dps []md.NumberDataPoint
 	g.instruments.Range(func(attrs A, ni I) bool {
@@ -933,7 +947,10 @@ func (g *groupNumberReader[I, A]) Read([]string) []md.Metric {
 		dps = append(dps, dp)
 		return true
 	})
-	return []md.Metric{newMetric(g.desc, dps, nil)}
+	if len(dps) == 0 {
+		return nil
+	}
+	return []md.Metric{newNumberMetric(g.desc, dps)}
 }
 
 func keyValueMaker[A comparable]() func(A) []md.KeyValue {

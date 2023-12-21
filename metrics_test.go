@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	md "github.com/jba/metrics/metricsdata"
 )
@@ -33,6 +34,8 @@ func TestMakeKeyValues(t *testing.T) {
 	}
 }
 
+var testTime = time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
+
 func testSingleReader(t *testing.T, r Reader, want md.Metric) {
 	t.Helper()
 	gotDs := r.Descriptions()
@@ -41,7 +44,7 @@ func testSingleReader(t *testing.T, r Reader, want md.Metric) {
 	}
 	gotMs := r.Read(nil)
 	for _, m := range gotMs {
-		setNonZeroTimes(7, m)
+		setNonZeroTimes(testTime, m)
 	}
 	if g := len(gotMs); g != 1 {
 		t.Fatalf("got %d metrics, want 1", g)
@@ -100,7 +103,7 @@ func TestNumberInstruments(t *testing.T) {
 			Sum: &md.Sum{
 				IsMonotonic: true,
 				DataPoints: []md.NumberDataPoint{
-					{TimeUnixNano: 7, Number: md.IntNumber(5)},
+					{Time: testTime, Number: md.IntNumber(5)},
 				},
 			},
 		})
@@ -115,7 +118,7 @@ func TestNumberInstruments(t *testing.T) {
 			Unit:        "",
 			Gauge: &md.Gauge{
 				DataPoints: []md.NumberDataPoint{
-					{TimeUnixNano: 7, Number: md.IntNumber(2)},
+					{Time: testTime, Number: md.IntNumber(2)},
 				},
 			},
 		})
@@ -129,7 +132,7 @@ func TestNumberInstruments(t *testing.T) {
 			Sum: &md.Sum{
 				IsMonotonic: false,
 				DataPoints: []md.NumberDataPoint{
-					{TimeUnixNano: 7, Number: md.IntNumber(11)},
+					{Time: testTime, Number: md.IntNumber(11)},
 				},
 			},
 		})
@@ -148,7 +151,7 @@ func TestHistogram(t *testing.T) {
 			Histogram: &md.Histogram{
 				DataPoints: []md.HistogramDataPoint{
 					{
-						TimeUnixNano:   7,
+						Time:           testTime,
 						ExplicitBounds: []float64{0, 100},
 						BucketCounts:   []uint64{4, 3, 2},
 					},
@@ -177,16 +180,16 @@ func TestGroups(t *testing.T) {
 					IsMonotonic: true,
 					DataPoints: []md.NumberDataPoint{
 						{
-							TimeUnixNano: 7,
-							Number:       md.IntNumber(2),
+							Time:   testTime,
+							Number: md.IntNumber(2),
 							Attributes: []md.KeyValue{
 								{"b", false},
 								{"s", "y"},
 							},
 						},
 						{
-							TimeUnixNano: 7,
-							Number:       md.IntNumber(4),
+							Time:   testTime,
+							Number: md.IntNumber(4),
 							Attributes: []md.KeyValue{
 								{"b", true},
 								{"s", "x"},
@@ -210,16 +213,16 @@ func TestGroups(t *testing.T) {
 				Gauge: &md.Gauge{
 					DataPoints: []md.NumberDataPoint{
 						{
-							TimeUnixNano: 7,
-							Number:       md.IntNumber(6),
+							Time:   testTime,
+							Number: md.IntNumber(6),
 							Attributes: []md.KeyValue{
 								{"b", false},
 								{"s", "x"},
 							},
 						},
 						{
-							TimeUnixNano: 7,
-							Number:       md.IntNumber(5),
+							Time:   testTime,
+							Number: md.IntNumber(5),
 							Attributes: []md.KeyValue{
 								{"b", true},
 								{"s", "y"},
@@ -242,16 +245,16 @@ func TestGroups(t *testing.T) {
 				Gauge: &md.Gauge{
 					DataPoints: []md.NumberDataPoint{
 						{
-							TimeUnixNano: 7,
-							Number:       md.IntNumber(11),
+							Time:   testTime,
+							Number: md.IntNumber(11),
 							Attributes: []md.KeyValue{
 								{"b", false},
 								{"s", "a"},
 							},
 						},
 						{
-							TimeUnixNano: 7,
-							Number:       md.IntNumber(12),
+							Time:   testTime,
+							Number: md.IntNumber(12),
 							Attributes: []md.KeyValue{
 								{"b", true},
 								{"s", "b"},
@@ -276,7 +279,7 @@ func TestGroups(t *testing.T) {
 				Histogram: &md.Histogram{
 					DataPoints: []md.HistogramDataPoint{
 						{
-							TimeUnixNano:   7,
+							Time:           testTime,
 							ExplicitBounds: []float64{0, 5},
 							Attributes: []md.KeyValue{
 								{"b", false},
@@ -285,7 +288,7 @@ func TestGroups(t *testing.T) {
 							BucketCounts: []uint64{1, 1, 0},
 						},
 						{
-							TimeUnixNano:   7,
+							Time:           testTime,
 							ExplicitBounds: []float64{0, 5},
 							Attributes: []md.KeyValue{
 								{"b", true},
