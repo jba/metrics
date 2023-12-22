@@ -51,30 +51,34 @@ func convertMetric(m md.Metric) omd.Metrics {
 	case m.Gauge != nil:
 		if isInt(m.Gauge.DataPoints) {
 			om.Data = omd.Gauge[int64]{
-				DataPoints: convertNumberDataPoints[int64](m.Gauge.DataPoints),
+				DataPoints: mapSlice(m.Gauge.DataPoints, convertNumberDataPoint[int64]),
 			}
 		} else {
 			om.Data = omd.Gauge[float64]{
-				DataPoints: convertNumberDataPoints[float64](m.Gauge.DataPoints),
+				DataPoints: mapSlice(m.Gauge.DataPoints, convertNumberDataPoint[float64]),
 			}
 		}
+
 	case m.Sum != nil:
 		if isInt(m.Sum.DataPoints) {
 			om.Data = omd.Sum[int64]{
-				DataPoints:  convertNumberDataPoints[int64](m.Sum.DataPoints),
+				DataPoints:  mapSlice(m.Sum.DataPoints, convertNumberDataPoint[int64]),
 				Temporality: omd.Temporality(m.Sum.Temporality),
 				IsMonotonic: m.Sum.IsMonotonic,
 			}
 		} else {
 			om.Data = omd.Sum[float64]{
-				DataPoints:  convertNumberDataPoints[float64](m.Sum.DataPoints),
+				DataPoints:  mapSlice(m.Sum.DataPoints, convertNumberDataPoint[float64]),
 				Temporality: omd.Temporality(m.Sum.Temporality),
 				IsMonotonic: m.Sum.IsMonotonic,
 			}
 		}
 
 	case m.Histogram != nil:
-		panic("unimp")
+		om.Data = omd.Histogram[float64]{
+			Temporality: omd.Temporality(m.Histogram.Temporality),
+			DataPoints:  mapSlice(m.Histogram.DataPoints, convertHistogramDataPoint),
+		}
 	}
 	return om
 }
@@ -86,52 +90,61 @@ func isInt(dps []md.NumberDataPoint) bool {
 	return dps[0].Number.IsInt()
 }
 
-func convertNumberDataPoints[N int64 | float64](ndps []md.NumberDataPoint) []omd.DataPoint[N] {
-	var dps []omd.DataPoint[N]
-	for _, ndp := range ndps {
-		dp := omd.DataPoint[N]{
-			Attributes: convertAttributes(ndp.Attributes),
-			StartTime:  ndp.StartTime,
-			Time:       ndp.Time,
-			Value:      md.NumberValue[N](ndp.Number),
-		}
-		dps = append(dps, dp)
+func convertNumberDataPoint[N int64 | float64](ndp md.NumberDataPoint) omd.DataPoint[N] {
+	return omd.DataPoint[N]{
+		Attributes: attribute.NewSet(mapSlice(ndp.Attributes, convertAttribute)...),
+		StartTime:  ndp.StartTime,
+		Time:       ndp.Time,
+		Value:      md.NumberValue[N](ndp.Number),
 	}
-	return dps
 }
 
-func convertAttributes(kvs []md.KeyValue) attribute.Set {
-	var akvs []attribute.KeyValue
-	for _, kv := range kvs {
-		var val attribute.Value
-		switch v := kv.Value.(type) {
-		case string:
-			val = attribute.StringValue(v)
-		case bool:
-			val = attribute.BoolValue(v)
-		case int64:
-			val = attribute.Int64Value(v)
-		default:
-			panic("bad Value type")
-		}
-		akvs = append(akvs, attribute.KeyValue{
-			Key:   attribute.Key(kv.Key),
-			Value: val,
-		})
+func convertHistogramDataPoint(hdp md.HistogramDataPoint) omd.HistogramDataPoint[float64] {
+	return omd.HistogramDataPoint[float64]{
+		Attributes:   attribute.NewSet(mapSlice(hdp.Attributes, convertAttribute)...),
+		StartTime:    hdp.StartTime,
+		Time:         hdp.Time,
+		Count:        hdp.Count(),
+		Bounds:       hdp.ExplicitBounds,
+		BucketCounts: hdp.BucketCounts,
+		Min:          ptrToExtrema(hdp.Min),
+		Max:          ptrToExtrema(hdp.Max),
+		Sum:          hdp.Sum,
 	}
-	return attribute.NewSet(akvs...)
 }
 
-// func (m Metric) IsInt() bool {
-// 	switch {
-// 	case m.Gauge != nil:
-// 		return isInt(m.Gauge.DataPoints)
-// 	case m.Sum != nil:
-// 		return isInt(m.Sum.DataPoints)
-// 	case m.Histogram != nil:
-// 		// Histograms are always floats.
-// 		return false
-// 	default: // shouldn't happen
-// 		return false
-// 	}
-// }
+func ptrToExtrema(pf *float64) omd.Extrema[float64] {
+	if pf == nil {
+		return omd.Extrema[float64]{}
+	}
+	return omd.NewExtrema[float64](*pf)
+}
+
+func convertAttribute(kv md.KeyValue) attribute.KeyValue {
+	var val attribute.Value
+	switch v := kv.Value.(type) {
+	case string:
+		val = attribute.StringValue(v)
+	case bool:
+		val = attribute.BoolValue(v)
+	case int64:
+		val = attribute.Int64Value(v)
+	default:
+		panic("bad Value type")
+	}
+	return attribute.KeyValue{
+		Key:   attribute.Key(kv.Key),
+		Value: val,
+	}
+}
+
+func mapSlice[E1, E2 any](s []E1, f func(E1) E2) []E2 {
+	if s == nil {
+		return nil
+	}
+	r := make([]E2, len(s))
+	for i, e := range s {
+		r[i] = f(e)
+	}
+	return r
+}

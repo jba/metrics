@@ -40,7 +40,7 @@ func TestJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	one := 1.0
 	md := MetricsData{
 		ResourceMetrics: []ResourceMetrics{
 			{
@@ -98,8 +98,8 @@ func TestJSON(t *testing.T) {
 										Attributes:     []KeyValue{{"my.histogram.attr", "some value"}},
 										BucketCounts:   []uint64{1, 1, 1},
 										Sum:            3,
-										Min:            1,
-										Max:            1,
+										Min:            &one,
+										Max:            &one,
 										ExplicitBounds: []float64{1},
 									},
 								},

@@ -132,7 +132,7 @@ type HistogramDataPoint struct {
 	StartTime    time.Time
 	BucketCounts []uint64
 	Sum          float64
-	Min, Max     float64
+	Min, Max     *float64
 	// The boundaries for bucket at index i are:
 	//
 	// (-infinity, explicit_bounds[i]] for i == 0
@@ -147,6 +147,14 @@ type HistogramDataPoint struct {
 	ExplicitBounds []float64
 }
 
+func (h HistogramDataPoint) Count() uint64 {
+	n := uint64(0)
+	for _, c := range h.BucketCounts {
+		n += c
+	}
+	return n
+}
+
 type jsonHDP struct {
 	StartTime      int64      `json:"startTimeUnixNano,omitEmpty"`
 	Time           int64      `json:"timeUnixNano"`
@@ -154,21 +162,17 @@ type jsonHDP struct {
 	Sum            float64    `json:"sum"`
 	BucketCounts   []uint64   `json:"bucketCounts"`
 	ExplicitBounds []float64  `json:"explicitBounds"`
-	Min            float64    `json:"min"`
-	Max            float64    `json:"max"`
+	Min            *float64   `json:"min,omitempty"`
+	Max            *float64   `json:"max,omitempty"`
 	Attributes     []KeyValue `json:"attributes"`
 }
 
 func (hdp HistogramDataPoint) MarshalJSON() ([]byte, error) {
-	count := uint64(0)
-	for _, c := range hdp.BucketCounts {
-		count += c
-	}
 	jh := jsonHDP{
 		Attributes:     hdp.Attributes,
 		Time:           hdp.Time.UnixNano(),
 		StartTime:      hdp.StartTime.UnixNano(),
-		Count:          count,
+		Count:          hdp.Count(),
 		Sum:            hdp.Sum,
 		Min:            hdp.Min,
 		Max:            hdp.Max,
