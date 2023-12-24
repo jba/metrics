@@ -5,12 +5,11 @@
 package metrics
 
 import (
-	"cmp"
 	"fmt"
 	"math"
 	"reflect"
 	rm "runtime/metrics"
-	"slices"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -74,14 +73,14 @@ func lastReader() Reader {
 }
 
 func sortNumberDataPoints(dps []md.NumberDataPoint) {
-	slices.SortFunc(dps, func(d1, d2 md.NumberDataPoint) int {
-		return cmp.Compare(sortString(d1.Attributes), sortString(d2.Attributes))
+	sort.Slice(dps, func(i, j int) bool {
+		return sortString(dps[i].Attributes) < sortString(dps[j].Attributes)
 	})
 }
 
 func sortHistogramDataPoints(dps []md.HistogramDataPoint) {
-	slices.SortFunc(dps, func(d1, d2 md.HistogramDataPoint) int {
-		return cmp.Compare(sortString(d1.Attributes), sortString(d2.Attributes))
+	sort.Slice(dps, func(i, j int) bool {
+		return sortString(dps[i].Attributes) < sortString(dps[j].Attributes)
 	})
 }
 
@@ -351,10 +350,10 @@ func TestConvertHistogram(t *testing.T) {
 		},
 	} {
 		gotCounts, gotBounds := convertHistogram(&test.in)
-		if g, w := gotCounts, test.wantCounts; !slices.Equal(g, w) {
+		if g, w := gotCounts, test.wantCounts; !reflect.DeepEqual(g, w) {
 			t.Errorf("%+v:\ncounts:\ngot  %v\nwant %v", test.in, g, w)
 		}
-		if g, w := gotBounds, test.wantBounds; !slices.Equal(g, w) {
+		if g, w := gotBounds, test.wantBounds; !reflect.DeepEqual(g, w) {
 			t.Errorf("%+v:\nbounds:\ngot  %v\nwant %v", test.in, g, w)
 		}
 	}

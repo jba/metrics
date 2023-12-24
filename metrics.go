@@ -5,7 +5,6 @@
 package metrics
 
 import (
-	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -13,7 +12,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
-	"slices"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -185,9 +184,7 @@ func All() []Description {
 	for _, r := range readers {
 		ds = append(ds, r.Descriptions()...)
 	}
-	slices.SortFunc(ds, func(d1, d2 Description) int {
-		return cmp.Compare(d1.Name, d2.Name)
-	})
+	sort.Slice(ds, func(i, j int) bool { return ds[i].Name < ds[j].Name })
 	return ds
 }
 
@@ -817,9 +814,7 @@ func keyValueMaker[A comparable]() func(A) []md.KeyValue {
 	t := v.Type()
 	var funcs []func(reflect.Value) md.KeyValue
 	vfields := reflect.VisibleFields(t)
-	slices.SortFunc(vfields, func(f1, f2 reflect.StructField) int {
-		return cmp.Compare(f1.Name, f2.Name)
-	})
+	sort.Slice(vfields, func(i, j int) bool { return vfields[i].Name < vfields[j].Name })
 	for _, f := range vfields {
 		if !f.IsExported() {
 			continue
