@@ -124,8 +124,8 @@ func (n Number) MarshalJSON() ([]byte, error) {
 }
 
 type Histogram struct {
-	Temporality int `json:"aggregationTemporality"`
-	IsInt       bool
+	Temporality int                  `json:"aggregationTemporality"`
+	IsInt       bool                 `json:"-"`
 	DataPoints  []HistogramDataPoint `json:"dataPoints"`
 }
 
