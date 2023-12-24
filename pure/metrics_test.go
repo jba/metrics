@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	ccmp "github.com/google/go-cmp/cmp"
+
 	md "github.com/jba/metrics/metricsdata"
 )
 
@@ -58,10 +60,10 @@ func testSingleReader(t *testing.T, r Reader, want md.Metric) {
 	} else if got.Histogram != nil {
 		sortHistogramDataPoints(got.Histogram.DataPoints)
 	}
-	if got := gotMs[0]; !reflect.DeepEqual(got, want) {
-		t.Errorf("\ngot  %+v\nwant %+v", got, want)
-		t.Logf("got %+v", got.Histogram)
-		t.Logf("want %+v", want.Histogram)
+	diff := ccmp.Diff(want, got,
+		ccmp.AllowUnexported(md.Number{}))
+	if diff != "" {
+		t.Errorf("mismatch (-want, +got):\n%s", diff)
 	}
 }
 
@@ -101,6 +103,7 @@ func TestNumberInstruments(t *testing.T) {
 			Description: "d",
 			Unit:        "",
 			Sum: &md.Sum{
+				Temporality: md.TemporalityCumulative,
 				IsMonotonic: true,
 				DataPoints: []md.NumberDataPoint{
 					{Time: testTime, Number: md.IntNumber(5)},
@@ -130,6 +133,7 @@ func TestNumberInstruments(t *testing.T) {
 			Description: "z",
 			Unit:        "",
 			Sum: &md.Sum{
+				Temporality: md.TemporalityCumulative,
 				IsMonotonic: false,
 				DataPoints: []md.NumberDataPoint{
 					{Time: testTime, Number: md.IntNumber(11)},
@@ -149,6 +153,8 @@ func TestHistogram(t *testing.T) {
 			Description: "hd",
 			Unit:        "",
 			Histogram: &md.Histogram{
+				Temporality: md.TemporalityCumulative,
+				IsInt:       true,
 				DataPoints: []md.HistogramDataPoint{
 					{
 						Time:           testTime,
@@ -178,6 +184,7 @@ func TestGroups(t *testing.T) {
 				Unit:        "",
 				Sum: &md.Sum{
 					IsMonotonic: true,
+					Temporality: md.TemporalityCumulative,
 					DataPoints: []md.NumberDataPoint{
 						{
 							Time:   testTime,
@@ -277,6 +284,8 @@ func TestGroups(t *testing.T) {
 				Description: "dhg",
 				Unit:        "",
 				Histogram: &md.Histogram{
+					Temporality: md.TemporalityCumulative,
+					IsInt:       true,
 					DataPoints: []md.HistogramDataPoint{
 						{
 							Time:           testTime,

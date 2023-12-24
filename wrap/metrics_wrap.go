@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// TODO: match prefix segment-wise: "foo" matches "foo/" but not "foolish".
-
 package metrics
 
 import (
@@ -121,6 +119,11 @@ func checkFloat(prefix string, f float64) bool {
 	}
 	return true
 }
+
+////////////////////////////////////////////////////////////////
+
+// Gauges don't correspond to anything in OTel.
+// They have only ObservableGauges.
 
 ////////////////////////////////////////////////////////////////
 

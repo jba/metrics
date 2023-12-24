@@ -99,11 +99,6 @@ type Number struct {
 	i     int64
 }
 
-func NumberValue[N int64 | float64](n Number) N {
-	// TODO: validate
-	return N(n.i)
-}
-
 func IntNumber(i int64) Number {
 	return Number{isInt: true, i: i}
 }
@@ -114,6 +109,13 @@ func FloatNumber(f float64) Number {
 
 func (n Number) IsInt() bool { return n.isInt }
 
+func (n Number) Value() any {
+	if n.isInt {
+		return n.i
+	}
+	return math.Float64frombits(uint64(n.i))
+}
+
 func (n Number) MarshalJSON() ([]byte, error) {
 	if n.isInt {
 		return json.Marshal(n.i)
@@ -122,7 +124,8 @@ func (n Number) MarshalJSON() ([]byte, error) {
 }
 
 type Histogram struct {
-	Temporality int                  `json:"aggregationTemporality"` // TODO
+	Temporality int `json:"aggregationTemporality"`
+	IsInt       bool
 	DataPoints  []HistogramDataPoint `json:"dataPoints"`
 }
 

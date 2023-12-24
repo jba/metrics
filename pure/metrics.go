@@ -29,7 +29,7 @@ import (
 
 var (
 	mu           sync.Mutex
-	names        = map[string]bool{}
+	names        map[string]bool
 	readers      []Reader
 	errorHandler = func(err error) {
 		fmt.Fprintln(os.Stderr, err)
@@ -207,7 +207,7 @@ type runtimeReader struct {
 	nameToRMName map[string]string
 }
 
-func init() {
+func initRuntimeMetrics() {
 	var ds []Description
 	dbn := map[string]Description{}
 	nameToRMName := map[string]string{}
@@ -329,7 +329,7 @@ func newNumberMetric(d Description, ndps []md.NumberDataPoint) md.Metric {
 	switch d.Sum {
 	case Summable:
 		m.Sum = &md.Sum{
-			Temporality: 0, // TODO
+			Temporality: md.TemporalityCumulative,
 			IsMonotonic: d.Cumulative,
 			DataPoints:  ndps,
 		}
@@ -414,6 +414,20 @@ func Register(r Reader) {
 	readers = append(readers, r)
 }
 
+// Reset metric system to initial state.
+// Useful for testing.
+func Reset() {
+	mu.Lock()
+	names = map[string]bool{}
+	readers = nil
+	mu.Unlock()
+	initRuntimeMetrics()
+}
+
+func init() {
+	Reset()
+}
+
 ////////////////////////////////////////////////////////////////
 // Convenience API.
 
@@ -439,7 +453,7 @@ type Counter[N ~int64 | ~float64] struct {
 //
 // The corresponding metric has the given name and description, and is
 // cumulative and summable. If N is time.Duration, the unit will be
-// "nanoseconds". If N has a method
+// "ns". If N has a method
 //
 //	Unit() string
 //
@@ -478,7 +492,7 @@ type Gauge[N ~int64 | ~float64] struct {
 //
 // The corresponding metric has the given name, description and SumKind.
 // It is not cumulative.
-// If N is time.Duration, the unit will be "nanoseconds". If N has a method
+// If N is time.Duration, the unit will be "ns". If N has a method
 //
 //	Unit() string
 //
@@ -542,7 +556,7 @@ type observableGauge[N ~int64 | ~float64] struct {
 //
 // The corresponding metric has the given name, description and SumKind.
 // It is not cumulative.
-// If N is time.Duration, the unit will be "nanoseconds". If N has a method
+// If N is time.Duration, the unit will be "ns". If N has a method
 //
 //	Unit() string
 //
@@ -675,7 +689,7 @@ type Histogram[N ~int64 | ~float64] struct {
 //
 // The corresponding metric has the given name and description, and is
 // cumulative and summable. If N is time.Duration, the unit will be
-// "nanoseconds". If N has a method
+// "ns". If N has a method
 //
 //	Unit() string
 //
@@ -796,7 +810,11 @@ func (r *histogramReader[N, A]) Read([]string) []md.Metric {
 		Name:        r.desc.Name,
 		Description: r.desc.Description,
 		Unit:        r.desc.Unit,
-		Histogram:   &md.Histogram{DataPoints: dps},
+		Histogram: &md.Histogram{
+			Temporality: md.TemporalityCumulative,
+			IsInt:       !isFloat[N](),
+			DataPoints:  dps,
+		},
 	}}
 }
 
@@ -898,7 +916,7 @@ func (r *numberReader[N]) Read([]string) []md.Metric {
 func unit[N ~int64 | ~float64]() string {
 	var z N
 	if _, ok := any(z).(time.Duration); ok {
-		return "nanoseconds"
+		return "ns"
 	}
 	if u, ok := any(z).(interface {
 		Unit() string

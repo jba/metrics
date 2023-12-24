@@ -16,6 +16,7 @@ import (
 	"github.com/kylelemons/godebug/pretty"
 
 	"go.opentelemetry.io/otel/attribute"
+	metric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
 	ometric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -31,7 +32,7 @@ func TestFull(t *testing.T) {
 	r := ometric.NewManualReader()
 
 	mp := ometric.NewMeterProvider(ometric.WithReader(r))
-	meter := mp.Meter("testing")
+	meter := mp.Meter("testing", metric.WithInstrumentationVersion("v1.0.2"))
 
 	ic := NewCounter[int64](meter, "reqs", "number of requests")
 	ic.Add(1)
@@ -111,7 +112,8 @@ func TestFull(t *testing.T) {
 		ScopeMetrics: []metricdata.ScopeMetrics{
 			{
 				Scope: instrumentation.Scope{
-					Name: "testing",
+					Name:    "testing",
+					Version: "v1.0.2",
 				},
 				Metrics: []metricdata.Metrics{wm1, wm2, wm3},
 			},

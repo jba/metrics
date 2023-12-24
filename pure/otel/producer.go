@@ -29,7 +29,7 @@ type Producer struct {
 var _ ometric.Producer = (*Producer)(nil)
 
 func NewProducer(scope instrumentation.Scope, metricNames ...string) *Producer {
-	return &Producer{names: metricNames}
+	return &Producer{scope: scope, names: metricNames}
 }
 
 func (p *Producer) Produce(ctx context.Context) ([]omd.ScopeMetrics, error) {
@@ -75,9 +75,17 @@ func convertMetric(m md.Metric) omd.Metrics {
 		}
 
 	case m.Histogram != nil:
-		om.Data = omd.Histogram[float64]{
-			Temporality: omd.Temporality(m.Histogram.Temporality),
-			DataPoints:  mapSlice(m.Histogram.DataPoints, convertHistogramDataPoint),
+		t := omd.Temporality(m.Histogram.Temporality)
+		if m.Histogram.IsInt {
+			om.Data = omd.Histogram[int64]{
+				Temporality: t,
+				DataPoints:  mapSlice(m.Histogram.DataPoints, convertHistogramDataPoint[int64]),
+			}
+		} else {
+			om.Data = omd.Histogram[float64]{
+				Temporality: t,
+				DataPoints:  mapSlice(m.Histogram.DataPoints, convertHistogramDataPoint[float64]),
+			}
 		}
 	}
 	return om
@@ -95,29 +103,29 @@ func convertNumberDataPoint[N int64 | float64](ndp md.NumberDataPoint) omd.DataP
 		Attributes: attribute.NewSet(mapSlice(ndp.Attributes, convertAttribute)...),
 		StartTime:  ndp.StartTime,
 		Time:       ndp.Time,
-		Value:      md.NumberValue[N](ndp.Number),
+		Value:      ndp.Number.Value().(N),
 	}
 }
 
-func convertHistogramDataPoint(hdp md.HistogramDataPoint) omd.HistogramDataPoint[float64] {
-	return omd.HistogramDataPoint[float64]{
+func convertHistogramDataPoint[N int64 | float64](hdp md.HistogramDataPoint) omd.HistogramDataPoint[N] {
+	return omd.HistogramDataPoint[N]{
 		Attributes:   attribute.NewSet(mapSlice(hdp.Attributes, convertAttribute)...),
 		StartTime:    hdp.StartTime,
 		Time:         hdp.Time,
 		Count:        hdp.Count(),
 		Bounds:       hdp.ExplicitBounds,
 		BucketCounts: hdp.BucketCounts,
-		Min:          ptrToExtrema(hdp.Min),
-		Max:          ptrToExtrema(hdp.Max),
-		Sum:          hdp.Sum,
+		Min:          ptrToExtrema[N](hdp.Min),
+		Max:          ptrToExtrema[N](hdp.Max),
+		Sum:          N(hdp.Sum),
 	}
 }
 
-func ptrToExtrema(pf *float64) omd.Extrema[float64] {
+func ptrToExtrema[N int64 | float64](pf *float64) omd.Extrema[N] {
 	if pf == nil {
-		return omd.Extrema[float64]{}
+		return omd.Extrema[N]{}
 	}
-	return omd.NewExtrema[float64](*pf)
+	return omd.NewExtrema[N](N(*pf))
 }
 
 func convertAttribute(kv md.KeyValue) attribute.KeyValue {
