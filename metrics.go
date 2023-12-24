@@ -32,14 +32,15 @@ var (
 	}
 )
 
-// Read reads the metrics with the given names.
-func Read(names ...string) []md.Metric {
-	rss := selectReaders(names)
+// Read reads the metrics for which f returns true.
+// / If f is nil, it reads all registered metrics.
+func Read(f func(name string) bool) []md.Metric {
+	rss := selectReaders(f)
 	return readMetrics(time.Now(), rss)
 }
 
 // NewHandler returns an http.Handler that serves the metrics
-// with the given names.
+// for which f returns true.
 //
 // By default, the handler serves the [JSON encoding] of
 // [OTLP], the Open Telemetry metrics protocol. With the query
@@ -51,9 +52,9 @@ func Read(names ...string) []md.Metric {
 // [JSON encoding]: https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding
 // [OTLP]: https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/metrics/v1/metrics.proto
 // [prometheus protocol]: TODO
-func NewHandler(resource map[string]string, names ...string) http.Handler {
+func NewHandler(resource map[string]string, f func(name string) bool) http.Handler {
 	// TODO: prometheus protocol
-	rss := selectReaders(names)
+	rss := selectReaders(f)
 
 	var rattrs []md.KeyValue
 	for k, v := range resource {
@@ -94,10 +95,9 @@ type readerSelected struct {
 // Note: we can't use a map from name to Reader in order to quickly
 // find the list of Readers, because we can't be sure a Reader is comparable.
 
-func selectReaders(names []string) []readerSelected {
-	nameMap := map[string]bool{}
-	for _, n := range names {
-		nameMap[n] = true
+func selectReaders(f func(string) bool) []readerSelected {
+	if f == nil {
+		f = func(string) bool { return true }
 	}
 	var rs []readerSelected
 	mu.Lock()
@@ -105,7 +105,7 @@ func selectReaders(names []string) []readerSelected {
 	for _, r := range readers {
 		var names []string
 		for _, d := range r.Descriptions() {
-			if nameMap[d.Name] {
+			if f(d.Name) {
 				names = append(names, d.Name)
 			}
 		}
@@ -178,9 +178,6 @@ type Description struct {
 }
 
 // All returns descriptions for all registered metrics.
-// It includes all the metrics in the runtime/metrics package,
-// with names prefixed with "runtime",
-// as well as other metrics added with [Register].
 func All() []Description {
 	mu.Lock()
 	defer mu.Unlock()

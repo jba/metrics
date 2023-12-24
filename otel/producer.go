@@ -25,17 +25,17 @@ import (
 // [go.opentelemetry.io/otel/sdk/metric.WithProducer] option.
 type Producer struct {
 	scope instrumentation.Scope
-	names []string
+	f     func(string) bool
 }
 
 var _ ometric.Producer = (*Producer)(nil)
 
-func NewProducer(scope instrumentation.Scope, metricNames ...string) *Producer {
-	return &Producer{scope: scope, names: metricNames}
+func NewProducer(scope instrumentation.Scope, f func(name string) bool) *Producer {
+	return &Producer{scope: scope, f: f}
 }
 
 func (p *Producer) Produce(ctx context.Context) ([]omd.ScopeMetrics, error) {
-	ms := metrics.Read(p.names...)
+	ms := metrics.Read(p.f)
 	sm := omd.ScopeMetrics{Scope: p.scope}
 	for _, m := range ms {
 		sm.Metrics = append(sm.Metrics, convertMetric(m))

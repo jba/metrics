@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http/httptest"
+	"strings"
 
 	"github.com/jba/metrics"
 )
@@ -15,7 +16,11 @@ import (
 func ExampleCounter() {
 	c := metrics.NewCounter[int64]("metrics_test/reqs", "total reqs")
 	c.Add(7)
-	h := metrics.NewHandler(nil, "metrics_test/", "runtime/gc/heap/allocs/")
+	f := func(name string) bool {
+		return strings.HasPrefix(name, "metrics_test/") ||
+			name == "runtime/gc/heap/allocs"
+	}
+	h := metrics.NewHandler(nil, f)
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)

@@ -6,6 +6,7 @@ package otel
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,10 +49,15 @@ func TestProducer(t *testing.T) {
 	}
 
 	scope := instrumentation.Scope{Name: "my/scope"}
-	p := NewProducer(scope,
-		"runtime/gc/stack/starting-size", "counts", "temperature", "fractionUsed", "remainingFuel",
-		"requestTimes", "requests", "gg", "hg",
-	)
+	p := NewProducer(scope, func(name string) bool {
+		if name == "runtime/gc/stack/starting-size" {
+			return true
+		}
+		if strings.HasPrefix(name, "runtime/") {
+			return false
+		}
+		return true
+	})
 	r := sdkmetric.NewManualReader(sdkmetric.WithProducer(p))
 	_ = sdkmetric.NewMeterProvider(sdkmetric.WithReader(r))
 	// We don't need the MeterProvider if we're not using OTel instruments.

@@ -21,7 +21,9 @@ func Example_Producer() {
 	}
 
 	scope := instrumentation.Scope{}
-	p := otel.NewProducer(scope, "runtime/memory/classes/total")
+	p := otel.NewProducer(scope, func(name string) bool {
+		return name == "runtime/memory/classes/total"
+	})
 	r := metric.NewManualReader(metric.WithProducer(p))
 	_ = r
 

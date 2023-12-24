@@ -12,9 +12,6 @@ import (
 	md "github.com/jba/metrics/metricsdata"
 )
 
-////////////////////////////////////////////////////////////////
-// runtime/metrics
-
 type runtimeReader struct {
 	descs        []Description
 	descsByName  map[string]Description
