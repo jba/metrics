@@ -7,17 +7,27 @@ package otel
 
 import (
 	"context"
+	"time"
 
 	"github.com/jba/metrics"
 
 	md "github.com/jba/metrics/metricsdata"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
-	ometric "go.opentelemetry.io/otel/sdk/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	omd "go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
-//func PeriodicallyExport(scope
+// Export sends the selected metrics to the exporter at the given interval.
+func Export(scope instrumentation.Scope, exporter sdkmetric.Exporter, interval time.Duration, f func(name string) bool) {
+	p := NewProducer(scope, f)
+	opts := []sdkmetric.PeriodicReaderOption{sdkmetric.WithProducer(p)}
+	if interval > 0 {
+		opts = append(opts, sdkmetric.WithInterval(interval), sdkmetric.WithTimeout(interval/2))
+	}
+	r := sdkmetric.NewPeriodicReader(exporter, opts...)
+	_ = sdkmetric.NewMeterProvider(sdkmetric.WithReader(r))
+}
 
 // Producer implements [go.opentelemetry.io/otel/sdk/metric.Producer].
 // Create one with [NewProducer], then add it to a
@@ -28,7 +38,7 @@ type Producer struct {
 	f     func(string) bool
 }
 
-var _ ometric.Producer = (*Producer)(nil)
+var _ sdkmetric.Producer = (*Producer)(nil)
 
 func NewProducer(scope instrumentation.Scope, f func(name string) bool) *Producer {
 	return &Producer{scope: scope, f: f}
