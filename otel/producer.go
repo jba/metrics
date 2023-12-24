@@ -17,6 +17,8 @@ import (
 	omd "go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
+//func PeriodicallyExport(scope
+
 // Producer implements [go.opentelemetry.io/otel/sdk/metric.Producer].
 // Create one with [NewProducer], then add it to a
 // [go.opentelemetry.io/otel/sdk/metric.Reader]  using the
